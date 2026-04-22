@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     model_config = {"env_file": ".env", "extra": "ignore"}
 
+    news_api_key: str = ""
+    gemini_api_key: str = ""
+
 
 settings = Settings()
 
