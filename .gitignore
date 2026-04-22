@@ -1,0 +1,11 @@
+# Environments
+.env
+.venv/
+
+# Database
+app/data/forex.db
+*.sqlite3
+
+# Python caches
+__pycache__/
+*.pyc

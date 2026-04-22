@@ -1,0 +1,42 @@
+{
+  "pair": "EURUSD",
+  "test_samples": 1818,
+  "xgboost": {
+    "accuracy": 0.548405,
+    "logloss": 0.688007
+  },
+  "baselines": {
+    "always_up": {
+      "accuracy": 0.451595
+    },
+    "previous_direction": {
+      "accuracy": 0.50275
+    }
+  },
+  "holdout": {
+    "rows": 187,
+    "date_range": "2026-04-12 23:00 UTC  \u2192  2026-04-22 20:00 UTC",
+    "accuracy": 0.57754,
+    "logloss": 0.683379,
+    "actual": {
+      "up": 79,
+      "down": 108
+    },
+    "predicted": {
+      "up": 0,
+      "down": 187
+    },
+    "per_class": {
+      "down": {
+        "precision": 0.57754,
+        "recall": 1.0,
+        "f1-score": 0.732203
+      },
+      "up": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0
+      }
+    }
+  }
+}
