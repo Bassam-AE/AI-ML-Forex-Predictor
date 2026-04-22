@@ -23,9 +23,7 @@ jobs:
             if git ls-remote --exit-code --heads origin "$branch"; then
               echo "Branch '$branch' already exists"
             else
-              git checkout -b "$branch" origin/main
-              git push origin "$branch"
+              git push origin HEAD:refs/heads/"$branch"
               echo "Branch '$branch' created"
-              git checkout main
             fi
           done
