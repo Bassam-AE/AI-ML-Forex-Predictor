@@ -1,0 +1,31 @@
+name: Create feature branches
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create feature branches
+        run: |
+          git fetch origin
+          for branch in ml api ui news; do
+            if git ls-remote --exit-code --heads origin "$branch"; then
+              echo "Branch '$branch' already exists"
+            else
+              git checkout -b "$branch" origin/main
+              git push origin "$branch"
+              echo "Branch '$branch' created"
+              git checkout main
+            fi
+          done
