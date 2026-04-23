@@ -1,3 +1,9 @@
+export type Pair = {
+  pair: string;
+  base: string;
+  quote: string;
+};
+
 export type OHLCBar = {
   ts: string;
   open: number;
@@ -7,10 +13,14 @@ export type OHLCBar = {
   volume: number | null;
 };
 
-export type Pair = {
-  pair: string;
-  base: string;
-  quote: string;
+export type NewsArticle = {
+  title: string;
+  source: string;
+  url: string;
+  published_at: string;
+  summary: string;
+  impact_score: number;
+  reasoning: string;
 };
 
 export type PredictResponse = {
@@ -24,15 +34,7 @@ export type PredictResponse = {
   };
   sentiment: {
     score: number;
-    articles: Array<{
-      title: string;
-      source: string;
-      url: string;
-      published_at: string;
-      summary: string;
-      impact_score: number;
-      reasoning: string;
-    }>;
+    articles: NewsArticle[];
   };
   composite: {
     prob_up: number;
@@ -41,4 +43,16 @@ export type PredictResponse = {
   };
   disclaimer: string;
   stub: boolean;
+};
+
+export type MetricsResponse = {
+  pair: string;
+  test_samples: number;
+  xgboost: { accuracy: number; logloss: number };
+  lstm: { accuracy: number; logloss: number };
+  meta_learner: { accuracy: number; logloss: number };
+  baselines: {
+    always_up: { accuracy: number };
+    previous_direction: { accuracy: number };
+  };
 };

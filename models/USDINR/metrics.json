@@ -2,8 +2,8 @@
   "pair": "USDINR",
   "test_samples": 1560,
   "xgboost": {
-    "accuracy": 0.525,
-    "logloss": 0.691357
+    "accuracy": 0.525641,
+    "logloss": 0.690714
   },
   "baselines": {
     "always_up": {
@@ -13,29 +13,37 @@
       "accuracy": 0.473718
     }
   },
+  "lstm": {
+    "accuracy": 0.521851,
+    "logloss": 0.694016
+  },
+  "meta_learner": {
+    "accuracy": 0.521851,
+    "logloss": 0.690313
+  },
   "holdout": {
     "rows": 158,
-    "date_range": "2026-04-13 01:00 UTC  \u2192  2026-04-22 20:00 UTC",
-    "accuracy": 0.594937,
-    "logloss": 0.670521,
+    "date_range": "2026-04-13 01:00 UTC  \u2192  2026-04-22 21:00 UTC",
+    "accuracy": 0.582278,
+    "logloss": 0.672276,
     "actual": {
       "up": 64,
       "down": 94
     },
     "predicted": {
-      "up": 2,
-      "down": 156
+      "up": 4,
+      "down": 154
     },
     "per_class": {
       "down": {
-        "precision": 0.596154,
-        "recall": 0.989362,
-        "f1-score": 0.744
+        "precision": 0.590909,
+        "recall": 0.968085,
+        "f1-score": 0.733871
       },
       "up": {
-        "precision": 0.5,
+        "precision": 0.25,
         "recall": 0.015625,
-        "f1-score": 0.030303
+        "f1-score": 0.029412
       }
     }
   }

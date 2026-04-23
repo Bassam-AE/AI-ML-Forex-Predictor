@@ -7,40 +7,33 @@ type Props = {
 };
 
 const STYLES = {
-  bullish: {
-    bg: "bg-green-50 border-green-200",
-    badge: "bg-green-100 text-green-800",
-    label: "↑ BULLISH",
-  },
-  bearish: {
-    bg: "bg-red-50 border-red-200",
-    badge: "bg-red-100 text-red-800",
-    label: "↓ BEARISH",
-  },
-  neutral: {
-    bg: "bg-gray-50 border-gray-200",
-    badge: "bg-gray-100 text-gray-700",
-    label: "→ NEUTRAL",
-  },
+  bullish: "bg-emerald-500",
+  bearish: "bg-rose-500",
+  neutral: "bg-slate-500",
+};
+
+const LABELS = {
+  bullish: "↑ BULLISH",
+  bearish: "↓ BEARISH",
+  neutral: "→ NEUTRAL",
 };
 
 export default function VerdictCard({ composite, pair, currentPrice }: Props) {
-  const s = STYLES[composite.verdict];
   return (
-    <div className={`rounded-xl border p-6 ${s.bg}`}>
-      <div className="flex items-center justify-between mb-3">
+    <div className={`rounded-xl p-6 text-white shadow-sm ${STYLES[composite.verdict]}`}>
+      <div className="flex items-start justify-between mb-2">
         <div>
-          <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">{pair}</span>
-          <p className="text-2xl font-bold text-gray-800 mt-0.5">{currentPrice.toFixed(4)}</p>
+          <p className="text-sm font-semibold uppercase tracking-widest opacity-80">{pair}</p>
+          <p className="text-2xl font-bold mt-0.5">{currentPrice.toFixed(4)}</p>
         </div>
-        <span className={`text-lg font-bold px-4 py-1.5 rounded-full ${s.badge}`}>
-          {s.label}
+        <span className="rounded-full bg-white/20 px-4 py-1.5 text-lg font-bold">
+          {LABELS[composite.verdict]}
         </span>
       </div>
-      <p className="text-3xl font-bold text-gray-800 mb-3">
-        {(composite.prob_up * 100).toFixed(1)}% chance up
+      <p className="text-5xl font-extrabold tracking-tight mt-3">
+        {(composite.prob_up * 100).toFixed(1)}%
       </p>
-      <p className="text-sm text-gray-600 leading-relaxed">{composite.ai_overview}</p>
+      <p className="text-sm font-medium opacity-75 mt-1">composite probability of upward move</p>
     </div>
   );
 }

@@ -9,7 +9,7 @@ from app.config import settings
 _MODEL = "gemini-2.5-flash"
 
 
-def _get_client() -> genai.Client:
+def _client() -> genai.Client:
     return genai.Client(api_key=settings.gemini_api_key)
 
 
@@ -40,7 +40,7 @@ async def score_articles(
     )
 
     try:
-        client = _get_client()
+        client = _client()
         response = await client.aio.models.generate_content(
             model=_MODEL,
             contents=prompt,

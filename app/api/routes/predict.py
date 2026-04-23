@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from app.ai.aggregate import aggregate_sentiment
+from app.ai.news import fetch_news
+from app.ai.overview import generate_overview
+from app.ai.sentiment import score_articles
 from app.api.schemas import (
     Composite,
     ModelPrediction,
@@ -11,94 +15,118 @@ from app.api.schemas import (
     PredictionsBlock,
     Sentiment,
 )
-from app.config import SUPPORTED_PAIR_CODES
-from app.db import get_connection
+from app.config import SUPPORTED_PAIR_CODES, SUPPORTED_PAIRS
+from app.serving.model_loader import predict_for_pair
 
 router = APIRouter()
 
-_STUB_ARTICLES = [
-    NewsArticle(
-        title="Central bank signals cautious stance amid inflation data",
-        source="Reuters",
-        url="https://example.com/article-1",
-        published_at="2024-01-01T09:00:00Z",
-        summary="Policymakers reiterated a data-dependent approach as core inflation remains above target.",
-        impact_score=0.72,
-        reasoning="Hawkish rhetoric typically supports the base currency.",
-    ),
-    NewsArticle(
-        title="PMI figures beat expectations, boosting risk appetite",
-        source="Bloomberg",
-        url="https://example.com/article-2",
-        published_at="2024-01-01T07:30:00Z",
-        summary="Manufacturing activity expanded for the third consecutive month, signalling resilience.",
-        impact_score=0.58,
-        reasoning="Stronger economic data increases demand for the quote currency.",
-    ),
-]
+
+def _verdict(prob: float) -> str:
+    if prob > 0.58:
+        return "bullish"
+    if prob < 0.42:
+        return "bearish"
+    return "neutral"
 
 
-def _det(pair: str, lo: float, hi: float, salt: int = 0) -> float:
-    """Deterministic float in [lo, hi] derived from pair hash."""
-    raw = (hash(pair + str(salt)) % 1000) / 1000.0
-    return lo + raw * (hi - lo)
-
-
-def _latest_close(pair: str) -> float:
-    conn = get_connection()
-    try:
-        row = conn.execute(
-            f'SELECT Close FROM "{pair}" ORDER BY Datetime DESC LIMIT 1'
-        ).fetchone()
-    finally:
-        conn.close()
-    return float(row["Close"]) if row else 1.0
+def _pair_info(pair: str) -> dict:
+    for p in SUPPORTED_PAIRS:
+        if p["pair"] == pair:
+            return p
+    return {}
 
 
 @router.post("/predict", response_model=PredictResponse)
-def predict(body: PredictRequest):
+async def predict(body: PredictRequest, request: Request):
     pair = (body.base + body.quote).upper()
     if pair not in SUPPORTED_PAIR_CODES:
         raise HTTPException(status_code=400, detail=f"Pair '{pair}' is not supported.")
 
-    xgb_prob = _det(pair, 0.45, 0.65, salt=1)
-    lstm_prob = _det(pair, 0.45, 0.65, salt=2)
-    meta_prob = (xgb_prob + lstm_prob) / 2
+    bundle = request.app.state.models.get(pair)
+    if bundle is None:
+        raise HTTPException(status_code=503, detail=f"Models for {pair} are not loaded.")
 
-    sent_score = _det(pair, -0.5, 0.5, salt=3)
-    composite_prob = round(0.7 * meta_prob + 0.3 * ((sent_score + 1) / 2), 4)
+    info = _pair_info(pair)
+    base, quote = info["base"], info["quote"]
 
-    if composite_prob > 0.58:
-        verdict = "bullish"
-        overview = (
-            f"The composite signal for {pair} is bullish, driven by positive momentum across "
-            "technical indicators and supportive sentiment. Models agree on an elevated probability "
-            "of an upward move in the next hour."
+    # --- Model inference ---
+    try:
+        model_result = predict_for_pair(pair, bundle)
+    except Exception as exc:
+        model_result = {
+            "xgb_prob": 0.5,
+            "lstm_prob": 0.5,
+            "meta_prob": 0.5,
+            "current_price": 0.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        print(f"[predict] model error for {pair}: {exc}")
+
+    xgb_prob = model_result["xgb_prob"]
+    lstm_prob = model_result["lstm_prob"]
+    meta_prob = model_result["meta_prob"]
+
+    # --- News fetch ---
+    try:
+        raw_articles = await fetch_news(base=base, quote=quote)
+    except Exception:
+        raw_articles = []
+
+    # --- Sentiment scoring ---
+    scored = []
+    if raw_articles:
+        try:
+            scored = await score_articles(raw_articles, base=base, quote=quote)
+        except Exception:
+            scored = []
+
+    sentiment_score = aggregate_sentiment(scored)
+
+    # --- Composite ---
+    composite_prob = round(0.7 * meta_prob + 0.3 * ((sentiment_score + 1) / 2), 4)
+    verdict = _verdict(composite_prob)
+
+    # --- AI overview ---
+    top_titles = [a.title for a in raw_articles[:3]]
+    try:
+        ai_overview = await generate_overview(
+            pair=pair,
+            verdict=verdict,
+            model_probs=model_result,
+            sentiment_score=sentiment_score,
+            top_titles=top_titles,
         )
-    elif composite_prob < 0.42:
-        verdict = "bearish"
-        overview = (
-            f"The composite signal for {pair} is bearish, with technical models and sentiment "
-            "both tilting negative. The probability of a downward move in the next hour is elevated."
+    except Exception:
+        ai_overview = (
+            f"The ensemble model gives a {verdict} verdict for {pair}. "
+            "Review the individual model probabilities and news below before drawing conclusions."
         )
-    else:
-        verdict = "neutral"
-        overview = (
-            f"The composite signal for {pair} is neutral. Technical models show mixed signals and "
-            "sentiment is close to zero, suggesting no strong directional bias for the next hour."
+
+    # --- Build response ---
+    news_articles = [
+        NewsArticle(
+            title=a.title,
+            source=a.source,
+            url=a.url,
+            published_at=a.published_at,
+            summary=a.summary,
+            impact_score=a.impact_score,
+            reasoning=a.reasoning,
         )
+        for a in scored
+    ]
 
     return PredictResponse(
         pair=pair,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        current_price=_latest_close(pair),
+        timestamp=model_result["timestamp"],
+        current_price=model_result["current_price"],
         predictions=PredictionsBlock(
             xgboost=ModelPrediction(prob_up=round(xgb_prob, 4)),
             lstm=ModelPrediction(prob_up=round(lstm_prob, 4)),
             meta_learner=ModelPrediction(prob_up=round(meta_prob, 4)),
         ),
-        sentiment=Sentiment(score=round(sent_score, 4), articles=_STUB_ARTICLES),
-        composite=Composite(prob_up=composite_prob, verdict=verdict, ai_overview=overview),
+        sentiment=Sentiment(score=round(sentiment_score, 4), articles=news_articles),
+        composite=Composite(prob_up=composite_prob, verdict=verdict, ai_overview=ai_overview),
         disclaimer="Educational use only. Not financial advice.",
-        stub=True,
+        stub=False,
     )
