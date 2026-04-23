@@ -17,6 +17,12 @@ function barColor(p: number): string {
   return "bg-gray-400";
 }
 
+function mlBarColor(p: number): string {
+  if (p > 0.5) return "bg-emerald-500";
+  if (p < 0.5) return "bg-rose-500";
+  return "bg-gray-400";
+}
+
 export default function PredictionsPanel({ predictions }: Props) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -26,6 +32,8 @@ export default function PredictionsPanel({ predictions }: Props) {
       <div className="flex flex-col gap-5">
         {MODELS.map(({ key, label, ai }) => {
           const prob = predictions[key]?.prob_up ?? 0.5;
+          const isMlModel = key === "xgboost" || key === "lstm";
+          const color = isMlModel ? mlBarColor(prob) : barColor(prob);
           return (
             <div key={key}>
               {ai && <hr className="border-gray-100 -mt-1 mb-4" />}
@@ -38,11 +46,13 @@ export default function PredictionsPanel({ predictions }: Props) {
                     </span>
                   )}
                 </span>
-                <span className="tabular-nums">{prob.toFixed(3)}</span>
+                <span className={`tabular-nums font-semibold ${isMlModel ? (prob > 0.5 ? "text-emerald-600" : prob < 0.5 ? "text-rose-600" : "text-gray-500") : "text-gray-700"}`}>
+                  {prob.toFixed(3)}
+                </span>
               </div>
               <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${barColor(prob)}`}
+                  className={`h-full rounded-full transition-all duration-500 ${color}`}
                   style={{ width: `${prob * 100}%` }}
                 />
               </div>

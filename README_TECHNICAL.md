@@ -2,21 +2,21 @@
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Language | Python 3.14 |
-| Package manager | uv |
-| Database | SQLite (per-pair OHLC tables) |
-| ML — tabular | XGBoost 3.x |
-| ML — sequence | PyTorch 2.x LSTM |
-| ML — ensemble | scikit-learn LogisticRegression |
-| Backend | FastAPI + uvicorn |
-| Validation | Pydantic v2 + pydantic-settings |
-| News | NewsAPI v2 (pair-specific AND queries, 30-min in-memory cache) |
-| AI signals | Google Gemini 2.5 Flash (batch sentiment · directional probe · overview) |
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS v3.4 |
-| Chart | TradingView lightweight-charts v5 |
-| HTTP client (frontend) | TanStack Query v5 |
+| Layer                  | Technology                                                               |
+| ---------------------- | ------------------------------------------------------------------------ |
+| Language               | Python 3.14                                                              |
+| Package manager        | uv                                                                       |
+| Database               | SQLite (per-pair OHLC tables)                                            |
+| ML — tabular           | XGBoost 3.x                                                              |
+| ML — sequence          | PyTorch 2.x LSTM                                                         |
+| ML — ensemble          | scikit-learn LogisticRegression                                          |
+| Backend                | FastAPI + uvicorn                                                        |
+| Validation             | Pydantic v2 + pydantic-settings                                          |
+| News                   | NewsAPI v2 (pair-specific AND queries, 30-min in-memory cache)           |
+| AI signals             | Google Gemini 2.5 Flash (batch sentiment · directional probe · overview) |
+| Frontend               | React 18 + TypeScript + Vite + Tailwind CSS v3.4                         |
+| Chart                  | TradingView lightweight-charts v5                                        |
+| HTTP client (frontend) | TanStack Query v5                                                        |
 
 ---
 
@@ -158,12 +158,14 @@ uv run python -m app.evaluate.evaluate_holdout
 ## Running the App
 
 Terminal 1 — backend:
+
 ```bash
 uv run uvicorn app.api.main:app --reload
 # http://localhost:8000
 ```
 
 Terminal 2 — frontend:
+
 ```bash
 cd frontend && npm run dev
 # http://localhost:5173
@@ -189,34 +191,39 @@ Base URL in dev: `http://localhost:8000`
 Frontend proxies `/api/*` → `http://localhost:8000/*` via Vite.
 
 ### GET /health
+
 ```json
-{"status": "ok"}
+{ "status": "ok" }
 ```
 
 ### GET /pairs
+
 ```json
 [{"pair": "EURUSD", "base": "EUR", "quote": "USD"}, ...]
 ```
 
 ### GET /history/{pair}?hours=168
+
 Returns up to `hours` of hourly OHLC bars (max 1000). `pair` ∈ `{EURUSD, GBPUSD, USDINR}`.
 
 ### GET /metrics/{pair}
+
 ```json
 {
   "pair": "EURUSD",
   "test_samples": 240,
-  "xgboost":      {"accuracy": 0.529, "logloss": 0.693},
-  "lstm":         {"accuracy": 0.521, "logloss": 0.698},
-  "meta_learner": {"accuracy": 0.533, "logloss": 0.691},
+  "xgboost": { "accuracy": 0.529, "logloss": 0.693 },
+  "lstm": { "accuracy": 0.521, "logloss": 0.698 },
+  "meta_learner": { "accuracy": 0.533, "logloss": 0.691 },
   "baselines": {
-    "always_up":          {"accuracy": 0.504},
-    "previous_direction": {"accuracy": 0.496}
+    "always_up": { "accuracy": 0.504 },
+    "previous_direction": { "accuracy": 0.496 }
   }
 }
 ```
 
 ### POST /predict
+
 ```json
 // Request
 {"base": "EUR", "quote": "USD"}
@@ -287,20 +294,20 @@ POST /predict
 
 All indicators implemented manually in `app/features/tabular.py`.
 
-| Feature | Description |
-|---|---|
-| `log_return_1h` | Log return over 1 bar |
-| `log_return_3h/6h/12h/24h` | Multi-period log returns |
-| `vol_6h`, `vol_24h` | Rolling std of 1h log returns |
-| `rsi_14` | RSI (Wilder EMA smoothing) |
-| `macd_line`, `macd_signal` | MACD(12,26,9) |
-| `bbp_20` | Bollinger Band % (position within band) |
-| `atr_14` | Average True Range |
-| `adx_14` | Average Directional Index |
-| `stoch_k` | Stochastic %K(14,3) |
-| `hour_sin`, `hour_cos` | Cyclical encoding of hour-of-day |
-| `london_session` | 1 if 07:00–15:59 UTC |
-| `ny_session` | 1 if 12:00–20:59 UTC |
+| Feature                    | Description                             |
+| -------------------------- | --------------------------------------- |
+| `log_return_1h`            | Log return over 1 bar                   |
+| `log_return_3h/6h/12h/24h` | Multi-period log returns                |
+| `vol_6h`, `vol_24h`        | Rolling std of 1h log returns           |
+| `rsi_14`                   | RSI (Wilder EMA smoothing)              |
+| `macd_line`, `macd_signal` | MACD(12,26,9)                           |
+| `bbp_20`                   | Bollinger Band % (position within band) |
+| `atr_14`                   | Average True Range                      |
+| `adx_14`                   | Average Directional Index               |
+| `stoch_k`                  | Stochastic %K(14,3)                     |
+| `hour_sin`, `hour_cos`     | Cyclical encoding of hour-of-day        |
+| `london_session`           | 1 if 07:00–15:59 UTC                    |
+| `ny_session`               | 1 if 12:00–20:59 UTC                    |
 
 **Target:** `1` if `close[t+1] > close[t]`, else `0`.
 
@@ -309,11 +316,13 @@ All indicators implemented manually in `app/features/tabular.py`.
 ## Model Architecture
 
 ### XGBoost
+
 - `objective="binary:logistic"`, `n_estimators=300`, `max_depth=4`, `learning_rate=0.05`
 - `subsample=0.8`, `colsample_bytree=0.7`, `reg_lambda=1.0`
 - Early stopping (patience=30) on validation logloss
 
 ### LSTM
+
 ```
 Input: (batch, 48, 5)   # 48-hour window × 5 channels
 LSTM(5 → 32, batch_first=True)
@@ -322,11 +331,13 @@ Linear(32 → 1)
 Sigmoid
 Output: (batch,)        # prob_up
 ```
+
 - Channels: open, high, low, close, log_return_1h
 - Per-channel normalization using training set stats only
 - Adam(lr=1e-3, weight_decay=1e-5), BCELoss, patience=5, max 30 epochs
 
 ### Meta-Learner
+
 - `LogisticRegression(C=1.0, max_iter=500)`
 - Input: `[xgb_val_prob, lstm_val_prob]`
 - Trained on validation fold, evaluated on held-out test fold

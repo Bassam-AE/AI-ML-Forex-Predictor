@@ -6,7 +6,7 @@ from google.genai import types
 from app.ai.schemas import GeminiBatchOutput, RawArticle, ScoredArticle
 from app.config import settings
 
-_MODEL = "gemini-2.5-flash"
+_MODEL = "gemini-2.5-flash-lite"
 
 
 def _client() -> genai.Client:

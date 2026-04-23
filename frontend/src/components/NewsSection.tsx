@@ -11,9 +11,15 @@ function relativeTime(iso: string): string {
 }
 
 function impactBadge(score: number) {
-  if (score > 0.15) return { cls: "bg-emerald-100 text-emerald-700", label: `+${score.toFixed(2)}` };
-  if (score < -0.15) return { cls: "bg-rose-100 text-rose-700", label: score.toFixed(2) };
+  if (score > 0) return { cls: "bg-emerald-100 text-emerald-700", label: `+${score.toFixed(2)}` };
+  if (score < 0) return { cls: "bg-rose-100 text-rose-700", label: score.toFixed(2) };
   return { cls: "bg-gray-100 text-gray-500", label: score.toFixed(2) };
+}
+
+function titleColor(score: number): string {
+  if (score > 0) return "text-emerald-700 hover:text-emerald-800";
+  if (score < 0) return "text-rose-700 hover:text-rose-800";
+  return "text-gray-800 hover:text-indigo-600";
 }
 
 export default function NewsSection({ articles }: Props) {
@@ -36,7 +42,7 @@ export default function NewsSection({ articles }: Props) {
                       href={a.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm font-medium text-gray-800 hover:text-indigo-600 leading-snug line-clamp-2"
+                      className={`text-sm font-medium leading-snug line-clamp-2 ${titleColor(a.impact_score)}`}
                     >
                       {a.title}
                     </a>
