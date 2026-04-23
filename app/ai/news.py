@@ -8,12 +8,42 @@ from app.config import settings
 
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
 
-CURRENCY_KEYWORDS: dict[str, str] = {
-    "USD": '"US dollar" OR "Federal Reserve" OR "US economy"',
-    "EUR": '"euro" OR "ECB" OR "eurozone"',
-    "GBP": '"British pound" OR "Bank of England" OR "UK economy"',
-    "INR": '"Indian rupee" OR "RBI" OR "India economy"',
+# Targeted pair-specific queries — require both sides to appear so off-topic articles are filtered out
+_PAIR_QUERIES: dict[str, str] = {
+    "EURUSD": (
+        '("EUR/USD" OR EURUSD OR "euro dollar") AND '
+        '("Federal Reserve" OR ECB OR "interest rate" OR inflation OR "central bank" OR "trade war")'
+    ),
+    "GBPUSD": (
+        '("GBP/USD" OR GBPUSD OR "pound dollar" OR cable) AND '
+        '("Bank of England" OR "Federal Reserve" OR "interest rate" OR inflation OR "UK economy")'
+    ),
+    "USDINR": (
+        '("USD/INR" OR USDINR OR "dollar rupee") AND '
+        '(RBI OR "Reserve Bank of India" OR "Indian rupee" OR "India economy" OR inflation)'
+    ),
+    "GBPINR": (
+        '("GBP/INR" OR GBPINR OR "pound rupee") AND '
+        '("Bank of England" OR RBI OR "Indian rupee" OR "British pound" OR economy)'
+    ),
 }
+
+_CURRENCY_KEYWORDS: dict[str, str] = {
+    "USD": '"US dollar" OR "Federal Reserve" OR "dollar index"',
+    "EUR": '"euro" OR "ECB" OR "eurozone" OR "euro area"',
+    "GBP": '"British pound" OR "sterling" OR "Bank of England"',
+    "INR": '"Indian rupee" OR "RBI" OR "Reserve Bank of India"',
+}
+
+
+def _build_query(base: str, quote: str) -> str:
+    pair = f"{base}{quote}".upper()
+    if pair in _PAIR_QUERIES:
+        return _PAIR_QUERIES[pair]
+    base_q = _CURRENCY_KEYWORDS.get(base.upper(), f'"{base}"')
+    quote_q = _CURRENCY_KEYWORDS.get(quote.upper(), f'"{quote}"')
+    return f"({base_q}) AND ({quote_q})"
+
 
 # Cache: pair_code → (fetched_at, articles)
 _cache: dict[str, tuple[datetime, list[RawArticle]]] = {}
@@ -23,8 +53,8 @@ _CACHE_TTL = timedelta(minutes=30)
 async def fetch_news(
     base: str,
     quote: str,
-    hours: int = 48,
-    max_articles: int = 8,
+    hours: int = 72,
+    max_articles: int = 20,
 ) -> list[RawArticle]:
     cache_key = f"{base}{quote}"
     now = datetime.now(timezone.utc)
@@ -34,9 +64,7 @@ async def fetch_news(
         print(f"[news] cache hit for {cache_key}", file=sys.stderr)
         return cached[1]
 
-    base_q = CURRENCY_KEYWORDS.get(base.upper(), base)
-    quote_q = CURRENCY_KEYWORDS.get(quote.upper(), quote)
-    query = f"({base_q}) OR ({quote_q})"
+    query = _build_query(base, quote)
     from_dt = (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     params = {

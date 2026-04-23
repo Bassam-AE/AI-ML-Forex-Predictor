@@ -9,12 +9,9 @@ import PredictionsPanel from "./components/PredictionsPanel";
 import PriceChart from "./components/PriceChart";
 import NewsSection from "./components/NewsSection";
 import MetricsFooter from "./components/MetricsFooter";
+import AnalysisProgress from "./components/AnalysisProgress";
 
 type SelectedPair = { base: string; quote: string; pair: string };
-
-function SkeletonCard({ h = "h-32" }: { h?: string }) {
-  return <div className={`rounded-xl border border-gray-200 bg-gray-100 animate-pulse ${h}`} />;
-}
 
 export default function App() {
   const [selected, setSelected] = useState<SelectedPair | null>(null);
@@ -48,7 +45,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <DisclaimerBanner />
 
-      <div className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 flex flex-col gap-5 pb-20">
+      <div className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 flex flex-col gap-5 pb-20">
         <div className="text-center mb-2">
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">ForexOracle</h1>
           <p className="text-gray-500 mt-1 text-sm">AI-powered forex direction prediction</p>
@@ -70,32 +67,32 @@ export default function App() {
           </div>
         )}
 
-        {isLoading && (
-          <div className="flex flex-col gap-5">
-            <SkeletonCard h="h-36" />
-            <SkeletonCard h="h-24" />
-            <SkeletonCard h="h-[350px]" />
-            <SkeletonCard h="h-32" />
-            <SkeletonCard h="h-48" />
-          </div>
-        )}
+        {isLoading && <AnalysisProgress />}
 
         {prediction && !isLoading && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <VerdictCard
-                composite={prediction.composite}
-                pair={prediction.pair}
-                currentPrice={prediction.current_price}
-              />
-              <PredictionsPanel predictions={prediction.predictions} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Main column: 2/3 width on large screens */}
+              <div className="lg:col-span-2 flex flex-col gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <VerdictCard
+                    composite={prediction.composite}
+                    pair={prediction.pair}
+                    currentPrice={prediction.current_price}
+                  />
+                  <PredictionsPanel predictions={prediction.predictions} />
+                </div>
+
+                <AIOverviewCard text={prediction.composite.ai_overview} />
+
+                <PriceChart pair={prediction.pair} />
+              </div>
+
+              {/* News sidebar: 1/3 width on large screens */}
+              <div className="lg:col-span-1">
+                <NewsSection articles={prediction.sentiment.articles} />
+              </div>
             </div>
-
-            <AIOverviewCard text={prediction.composite.ai_overview} />
-
-            <PriceChart pair={prediction.pair} />
-
-            <NewsSection articles={prediction.sentiment.articles} />
 
             <p className="text-center text-xs text-gray-400 mt-2">{prediction.disclaimer}</p>
           </>

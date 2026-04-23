@@ -1,8 +1,10 @@
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.ai.aggregate import aggregate_sentiment
+from app.ai.ai_predict import get_ai_prob
 from app.ai.news import fetch_news
 from app.ai.overview import generate_overview
 from app.ai.sentiment import score_articles
@@ -49,9 +51,9 @@ async def predict(body: PredictRequest, request: Request):
     info = _pair_info(pair)
     base, quote = info["base"], info["quote"]
 
-    # --- Model inference ---
+    # --- Model inference (CPU-bound — run in thread pool) ---
     try:
-        model_result = predict_for_pair(pair, bundle)
+        model_result = await asyncio.to_thread(predict_for_pair, pair, bundle)
     except Exception as exc:
         model_result = {
             "xgb_prob": 0.5,
@@ -86,21 +88,30 @@ async def predict(body: PredictRequest, request: Request):
     composite_prob = round(0.7 * meta_prob + 0.3 * ((sentiment_score + 1) / 2), 4)
     verdict = _verdict(composite_prob)
 
-    # --- AI overview ---
-    top_titles = [a.title for a in raw_articles[:3]]
+    # --- AI overview + Gemini directional (run concurrently) ---
+    top_titles = [a.title for a in raw_articles[:5]]
+    fallback_overview = (
+        f"The ensemble model gives a {verdict} verdict for {pair}. "
+        "Review the individual model probabilities and news below before drawing conclusions."
+    )
     try:
-        ai_overview = await generate_overview(
-            pair=pair,
-            verdict=verdict,
-            model_probs=model_result,
-            sentiment_score=sentiment_score,
-            top_titles=top_titles,
+        ai_overview, gemini_prob = await asyncio.gather(
+            generate_overview(
+                pair=pair,
+                verdict=verdict,
+                model_probs=model_result,
+                sentiment_score=sentiment_score,
+                top_titles=top_titles,
+            ),
+            get_ai_prob(
+                pair=pair,
+                sentiment_score=sentiment_score,
+                top_titles=top_titles,
+            ),
         )
     except Exception:
-        ai_overview = (
-            f"The ensemble model gives a {verdict} verdict for {pair}. "
-            "Review the individual model probabilities and news below before drawing conclusions."
-        )
+        ai_overview = fallback_overview
+        gemini_prob = 0.5
 
     # --- Build response ---
     news_articles = [
@@ -124,6 +135,7 @@ async def predict(body: PredictRequest, request: Request):
             xgboost=ModelPrediction(prob_up=round(xgb_prob, 4)),
             lstm=ModelPrediction(prob_up=round(lstm_prob, 4)),
             meta_learner=ModelPrediction(prob_up=round(meta_prob, 4)),
+            gemini=ModelPrediction(prob_up=gemini_prob),
         ),
         sentiment=Sentiment(score=round(sentiment_score, 4), articles=news_articles),
         composite=Composite(prob_up=composite_prob, verdict=verdict, ai_overview=ai_overview),

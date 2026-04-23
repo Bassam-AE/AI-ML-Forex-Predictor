@@ -31,6 +31,7 @@ export type PredictResponse = {
     xgboost: { prob_up: number };
     lstm: { prob_up: number };
     meta_learner: { prob_up: number };
+    gemini: { prob_up: number };
   };
   sentiment: {
     score: number;

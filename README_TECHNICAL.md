@@ -3,18 +3,20 @@
 ## Stack
 
 | Layer | Technology |
-|-------|-----------|
+|---|---|
 | Language | Python 3.14 |
 | Package manager | uv |
-| Database | SQLite (per-pair tables) |
+| Database | SQLite (per-pair OHLC tables) |
 | ML — tabular | XGBoost 3.x |
 | ML — sequence | PyTorch 2.x LSTM |
 | ML — ensemble | scikit-learn LogisticRegression |
 | Backend | FastAPI + uvicorn |
 | Validation | Pydantic v2 + pydantic-settings |
-| News | NewsAPI v2 |
-| Sentiment | Google Gemini (gemini-2.5-flash, batch scoring) |
-| Frontend | React + TypeScript + Vite + Tailwind CSS v3.4 + Recharts |
+| News | NewsAPI v2 (pair-specific AND queries, 30-min in-memory cache) |
+| AI signals | Google Gemini 2.5 Flash (batch sentiment · directional probe · overview) |
+| Frontend | React 18 + TypeScript + Vite + Tailwind CSS v3.4 |
+| Chart | TradingView lightweight-charts v5 |
+| HTTP client (frontend) | TanStack Query v5 |
 
 ---
 
@@ -23,54 +25,76 @@
 ```
 .
 ├── app/
-│   ├── ai/               # News fetch + Gemini sentiment pipeline
-│   │   ├── news.py       # Async NewsAPI client, 30-min in-memory cache
-│   │   ├── sentiment.py  # Gemini batch scorer (1 call per pair, not per article)
-│   │   ├── aggregate.py  # Confidence-weighted sentiment aggregation
-│   │   └── schemas.py    # RawArticle, ScoredArticle, GeminiBatchOutput
+│   ├── ai/
+│   │   ├── news.py         # Async NewsAPI client; pair-specific AND queries; 30-min cache
+│   │   ├── sentiment.py    # Gemini batch scorer (1 API call per pair, not per article)
+│   │   ├── ai_predict.py   # Gemini directional probe → prob_up float
+│   │   ├── overview.py     # Gemini 2-3 sentence market summary
+│   │   ├── aggregate.py    # Confidence-weighted sentiment aggregation
+│   │   └── schemas.py      # RawArticle, ScoredArticle, GeminiBatchOutput
 │   ├── api/
-│   │   ├── main.py       # FastAPI app + CORS
-│   │   └── routes/       # health, pairs, history, predict
+│   │   ├── main.py         # FastAPI app + CORS + model lifespan loader
+│   │   ├── schemas.py      # Pydantic request/response models
+│   │   └── routes/
+│   │       ├── health.py
+│   │       ├── pairs.py
+│   │       ├── history.py  # OHLC history for chart
+│   │       ├── predict.py  # Main prediction endpoint
+│   │       └── metrics.py  # Per-pair test accuracy metrics
 │   ├── data/
-│   │   ├── fetch.py      # yfinance → SQLite (2y hourly OHLC)
-│   │   ├── split_data.py # Chronological train/test split → {pair}_TRAIN, {pair}_TEST
-│   │   └── forex.db      # SQLite database (gitignored)
+│   │   ├── fetch.py        # yfinance → SQLite (2y hourly OHLC)
+│   │   └── split_data.py   # Chronological split → {pair}_TRAIN / {pair}_TEST
 │   ├── evaluate/
-│   │   └── evaluate_holdout.py  # XGBoost evaluation on held-out TEST split
+│   │   └── evaluate_holdout.py
 │   ├── features/
-│   │   └── tabular.py    # All 18 technical indicators (manual — no pandas-ta)
+│   │   └── tabular.py      # 18 manual technical indicators (no pandas-ta)
 │   ├── models/
-│   │   └── lstm_model.py # ForexLSTM nn.Module definition
+│   │   └── lstm_model.py   # ForexLSTM nn.Module
+│   ├── serving/
+│   │   └── model_loader.py # Loads all models at startup; predict_for_pair()
 │   ├── train/
-│   │   ├── train_xgb.py  # XGBoost trainer
-│   │   ├── train_lstm.py # LSTM trainer (also saves val/test .npy prediction files)
-│   │   └── train_meta.py # LR meta-learner trainer (no torch import — avoids macOS OpenMP deadlock)
-│   ├── config.py         # pydantic-settings: DB_PATH, API keys, SUPPORTED_PAIRS
-│   └── db.py             # sqlite3 connection helper
+│   │   ├── train_xgb.py
+│   │   ├── train_lstm.py   # Also saves val/test .npy prediction files
+│   │   └── train_meta.py   # No torch import (avoids macOS OpenMP deadlock)
+│   ├── config.py           # pydantic-settings: DB_PATH, API keys, SUPPORTED_PAIRS
+│   └── db.py
 ├── frontend/
 │   ├── src/
-│   │   ├── components/   # PairPicker, VerdictCard, PredictionPanel
-│   │   ├── lib/api.ts    # Typed API client (uses /api Vite proxy in dev)
-│   │   └── App.tsx
-│   └── vite.config.ts    # /api → http://localhost:8000 proxy
+│   │   ├── components/
+│   │   │   ├── PairPicker.tsx
+│   │   │   ├── VerdictCard.tsx         # Composite signal + price
+│   │   │   ├── PredictionsPanel.tsx    # Probability bars (XGB, LSTM, Meta, Gemini)
+│   │   │   ├── AIOverviewCard.tsx      # Gemini narrative
+│   │   │   ├── PriceChart.tsx          # lightweight-charts v5 candlestick
+│   │   │   ├── NewsSection.tsx         # Scored articles sidebar
+│   │   │   ├── MetricsFooter.tsx       # Sticky test-accuracy footer
+│   │   │   ├── AnalysisProgress.tsx    # Animated loading checklist
+│   │   │   └── DisclaimerBanner.tsx
+│   │   ├── lib/
+│   │   │   ├── api.ts      # Typed API client (Vite /api proxy in dev)
+│   │   │   └── types.ts    # PredictResponse, MetricsResponse, etc.
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   └── vite.config.ts      # /api → http://localhost:8000 proxy
 ├── models/
 │   └── {EURUSD,GBPUSD,USDINR}/
 │       ├── xgb.json
 │       ├── lstm.pt
-│       ├── lstm_scaler.pkl        # {"mean": np.array(5), "std": np.array(5)}
-│       ├── lstm_val_probs.npy     # Pre-computed val predictions (used by train_meta)
+│       ├── lstm_scaler.pkl         # {"mean": np.array(5), "std": np.array(5)}
+│       ├── lstm_val_probs.npy      # Pre-computed val predictions (for train_meta)
 │       ├── lstm_val_labels.npy
 │       ├── lstm_test_probs.npy
 │       ├── lstm_test_labels.npy
 │       ├── meta.pkl
-│       ├── metrics.json           # xgboost + lstm + meta_learner + holdout keys
+│       ├── metrics.json
 │       └── holdout_predictions.csv
 ├── scripts/
-│   ├── smoke_test.py           # Loads all 3 models for EURUSD, prints 50-row prob table
-│   └── test_news_pipeline.py   # End-to-end news + sentiment smoke test
-├── .env                        # GEMINI_API_KEY, NEWS_API_KEY (not committed)
+│   ├── smoke_test.py               # Load all 3 models for EURUSD, print prob table
+│   └── test_news_pipeline.py       # End-to-end news + Gemini sentiment test
+├── .env                            # GEMINI_API_KEY, NEWS_API_KEY (not committed)
 ├── .env.example
-└── pyproject.toml
+├── pyproject.toml
+└── uv.lock
 ```
 
 ---
@@ -79,9 +103,9 @@
 
 - Python 3.14+
 - [uv](https://docs.astral.sh/uv/) installed
-- Node.js 18+ (for frontend)
+- Node.js 18+
 - A NewsAPI key (free tier: 100 req/day) — newsapi.org
-- A Google Gemini API key (paid tier recommended) — aistudio.google.com
+- A Google Gemini API key — aistudio.google.com
 
 ---
 
@@ -91,7 +115,7 @@
 # Install Python dependencies (creates .venv automatically)
 uv sync
 
-# Install the app package as editable (required for `app.*` imports)
+# Install the app package as editable (required for app.* imports)
 uv pip install -e .
 
 # Install frontend dependencies
@@ -106,7 +130,7 @@ cp .env.example .env
 
 ## Full Training Pipeline
 
-Run these in order. Each step depends on the previous.
+Run in order — each step depends on the previous. Trained weights are already committed in `models/` so this step is optional.
 
 ```bash
 # 1. Fetch 2 years of hourly OHLC data into SQLite
@@ -118,16 +142,31 @@ uv run python -m app.data.split_data
 # 3. Train XGBoost — saves xgb.json + metrics.json per pair
 uv run python -m app.train.train_xgb
 
-# 4. Train LSTM — saves lstm.pt, lstm_scaler.pkl, and val/test .npy files per pair
-#    Takes ~3–5 minutes on CPU. Set device to CUDA if available.
+# 4. Train LSTM — saves lstm.pt, scaler, and val/test .npy files per pair
+#    ~3-5 min on CPU
 uv run python -m app.train.train_lstm
 
 # 5. Train meta-learner — stacks XGBoost + LSTM val predictions via LogisticRegression
-#    Saves meta.pkl, updates metrics.json
 uv run python -m app.train.train_meta
 
-# 6. (Optional) Evaluate XGBoost on the held-out 10-day test split
+# 6. (Optional) Evaluate on the held-out 10-day test split
 uv run python -m app.evaluate.evaluate_holdout
+```
+
+---
+
+## Running the App
+
+Terminal 1 — backend:
+```bash
+uv run uvicorn app.api.main:app --reload
+# http://localhost:8000
+```
+
+Terminal 2 — frontend:
+```bash
+cd frontend && npm run dev
+# http://localhost:5173
 ```
 
 ---
@@ -138,33 +177,16 @@ uv run python -m app.evaluate.evaluate_holdout
 # Confirm all 3 models load and produce predictions for EURUSD
 uv run python scripts/smoke_test.py
 
-# Confirm news fetch + Gemini sentiment pipeline works
+# Confirm news fetch + Gemini sentiment pipeline works end-to-end
 uv run python scripts/test_news_pipeline.py
 ```
 
 ---
 
-## Running the App
-
-Terminal 1 — backend:
-```bash
-uv run uvicorn app.api.main:app --reload
-# Listening on http://localhost:8000
-```
-
-Terminal 2 — frontend:
-```bash
-cd frontend && npm run dev
-# Listening on http://localhost:5173
-```
-
-Open `http://localhost:5173` in a browser.
-
----
-
 ## API Reference
 
-All endpoints are at `http://localhost:8000`. In dev the frontend proxies `/api/*` → `http://localhost:8000/*`.
+Base URL in dev: `http://localhost:8000`  
+Frontend proxies `/api/*` → `http://localhost:8000/*` via Vite.
 
 ### GET /health
 ```json
@@ -173,25 +195,24 @@ All endpoints are at `http://localhost:8000`. In dev the frontend proxies `/api/
 
 ### GET /pairs
 ```json
-{
-  "pairs": [
-    {"base": "EUR", "quote": "USD", "code": "EURUSD"},
-    ...
-  ]
-}
+[{"pair": "EURUSD", "base": "EUR", "quote": "USD"}, ...]
 ```
 
 ### GET /history/{pair}?hours=168
-Returns up to `hours` of hourly OHLC bars for the pair (max 1000h).
-`pair` must be one of `EURUSD`, `GBPUSD`, `USDINR`.
+Returns up to `hours` of hourly OHLC bars (max 1000). `pair` ∈ `{EURUSD, GBPUSD, USDINR}`.
 
+### GET /metrics/{pair}
 ```json
 {
   "pair": "EURUSD",
-  "bars": [
-    {"datetime": "2026-04-22T10:00:00Z", "open": 1.134, "high": 1.137, "low": 1.133, "close": 1.135, "volume": 0},
-    ...
-  ]
+  "test_samples": 240,
+  "xgboost":      {"accuracy": 0.529, "logloss": 0.693},
+  "lstm":         {"accuracy": 0.521, "logloss": 0.698},
+  "meta_learner": {"accuracy": 0.533, "logloss": 0.691},
+  "baselines": {
+    "always_up":          {"accuracy": 0.504},
+    "previous_direction": {"accuracy": 0.496}
+  }
 }
 ```
 
@@ -203,29 +224,71 @@ Returns up to `hours` of hourly OHLC bars for the pair (max 1000h).
 // Response
 {
   "pair": "EURUSD",
-  "current_price": 1.1352,
-  "stub": true,
+  "timestamp": "2026-04-23T01:47:17Z",
+  "current_price": 1.1677,
   "predictions": {
-    "xgboost":     {"prob_up": 0.54, "prob_down": 0.46, "verdict": "bullish"},
-    "lstm":        {"prob_up": 0.51, "prob_down": 0.49, "verdict": "neutral"},
-    "meta_learner":{"prob_up": 0.53, "prob_down": 0.47, "verdict": "bullish"}
+    "xgboost":      {"prob_up": 0.4701},
+    "lstm":         {"prob_up": 0.5297},
+    "meta_learner": {"prob_up": 0.4457},
+    "gemini":       {"prob_up": 0.55}
   },
-  "sentiment": {"score": 0.0, "label": "neutral", "article_count": 0},
-  "composite": {"prob_up": 0.52, "verdict": "bullish"},
-  "ai_overview": "Stub prediction — models not yet wired in."
+  "sentiment": {
+    "score": -0.267,
+    "articles": [
+      {
+        "title": "...",
+        "source": "Reuters",
+        "url": "...",
+        "published_at": "2026-04-22T14:00:00Z",
+        "summary": "...",
+        "impact_score": -0.8,
+        "reasoning": "..."
+      }
+    ]
+  },
+  "composite": {
+    "prob_up": 0.4781,
+    "verdict": "bearish",
+    "ai_overview": "The ensemble leans bearish for EURUSD..."
+  },
+  "disclaimer": "Educational use only. Not financial advice.",
+  "stub": false
 }
 ```
 
-> **Note:** `stub: true` means the model probabilities are placeholder values. Real XGBoost + LSTM + meta inference is not yet wired into this endpoint.
+---
+
+## Prediction Pipeline (per request)
+
+```
+POST /predict
+  │
+  ├─ asyncio.to_thread → predict_for_pair()
+  │     └─ SQLite OHLC → make_features() → XGBoost → LSTM (48-bar window) → Meta-LR
+  │
+  ├─ fetch_news() — pair-specific AND query, 30-min cache
+  │
+  ├─ score_articles() — single Gemini batch call → impact_score per article
+  │
+  ├─ aggregate_sentiment() — confidence-weighted mean
+  │
+  ├─ asyncio.gather(
+  │     generate_overview(),   ← Gemini narrative
+  │     get_ai_prob()          ← Gemini directional probe
+  │   )
+  │
+  └─ composite = 0.7 × meta_prob + 0.3 × ((sentiment + 1) / 2)
+       verdict: >0.58 bullish, <0.42 bearish, else neutral
+```
 
 ---
 
 ## Feature Engineering
 
-All indicators implemented manually in `app/features/tabular.py` (pandas-ta is incompatible with numpy 2.3+).
+All indicators implemented manually in `app/features/tabular.py`.
 
 | Feature | Description |
-|---------|-------------|
+|---|---|
 | `log_return_1h` | Log return over 1 bar |
 | `log_return_3h/6h/12h/24h` | Multi-period log returns |
 | `vol_6h`, `vol_24h` | Rolling std of 1h log returns |
@@ -239,7 +302,7 @@ All indicators implemented manually in `app/features/tabular.py` (pandas-ta is i
 | `london_session` | 1 if 07:00–15:59 UTC |
 | `ny_session` | 1 if 12:00–20:59 UTC |
 
-**Target:** `1` if `close[t+1] > close[t]`, else `0`. Approximately 50/50 split.
+**Target:** `1` if `close[t+1] > close[t]`, else `0`.
 
 ---
 
@@ -249,38 +312,26 @@ All indicators implemented manually in `app/features/tabular.py` (pandas-ta is i
 - `objective="binary:logistic"`, `n_estimators=300`, `max_depth=4`, `learning_rate=0.05`
 - `subsample=0.8`, `colsample_bytree=0.7`, `reg_lambda=1.0`
 - Early stopping (patience=30) on validation logloss
-- Input: 18 tabular features
 
 ### LSTM
 ```
-Input: (batch, 48, 5)   # 48-hour window, 5 channels
+Input: (batch, 48, 5)   # 48-hour window × 5 channels
 LSTM(5 → 32, batch_first=True)
 Dropout(0.3)
 Linear(32 → 1)
-Sigmoid → squeeze(-1)
-Output: (batch,)        # probability of Up
+Sigmoid
+Output: (batch,)        # prob_up
 ```
 - Channels: open, high, low, close, log_return_1h
-- Normalized per-channel using training window stats only
-- Adam(lr=1e-3, weight_decay=1e-5), BCELoss, early stopping patience=5, max 30 epochs
+- Per-channel normalization using training set stats only
+- Adam(lr=1e-3, weight_decay=1e-5), BCELoss, patience=5, max 30 epochs
 
 ### Meta-Learner
 - `LogisticRegression(C=1.0, max_iter=500)`
-- Input: `[xgb_val_prob, lstm_val_prob]` (2 features)
-- Trained on validation set predictions, evaluated on test set
-- No torch import in this module (avoids macOS OpenMP deadlock when both torch and xgboost are loaded in the same process — LSTM predictions are pre-saved as `.npy` files by `train_lstm.py`)
+- Input: `[xgb_val_prob, lstm_val_prob]`
+- Trained on validation fold, evaluated on held-out test fold
 
----
-
-## Known Issues
-
-| Issue | Status |
-|-------|--------|
-| `/predict` returns stub values | Not yet wired — real model inference pending |
-| macOS torch+xgboost OpenMP conflict | Worked around via pre-saved .npy files; serving code will need care |
-| Frontend chart and metrics components | Placeholder boxes — not implemented |
-| LSTM/meta not in holdout evaluation | evaluate_holdout.py only covers XGBoost |
-| NewsAPI returns off-topic articles | Gemini scorer handles this correctly with low confidence scores |
+**macOS note:** `train_meta.py` has zero torch imports. LSTM predictions are pre-saved as `.npy` files by `train_lstm.py` to avoid the xgboost + torch OpenMP deadlock on macOS. Serving code sets `KMP_DUPLICATE_LIB_OK=TRUE` before any imports.
 
 ---
 
@@ -289,5 +340,5 @@ Output: (batch,)        # probability of Up
 ```bash
 rm app/data/forex.db
 rm -rf models/EURUSD models/GBPUSD models/USDINR
-# Then re-run the full training pipeline from Step 1 above
+# Re-run the full training pipeline from Step 1 above
 ```

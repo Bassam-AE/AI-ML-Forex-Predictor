@@ -3,9 +3,10 @@ import type { PredictResponse } from "../lib/types";
 type Props = { predictions: PredictResponse["predictions"] };
 
 const MODELS = [
-  { key: "xgboost" as const, label: "XGBoost" },
-  { key: "lstm" as const, label: "LSTM" },
-  { key: "meta_learner" as const, label: "Meta-Learner" },
+  { key: "xgboost" as const, label: "XGBoost", ai: false },
+  { key: "lstm" as const, label: "LSTM", ai: false },
+  { key: "meta_learner" as const, label: "Meta-Learner", ai: false },
+  { key: "gemini" as const, label: "Gemini AI", ai: true },
 ];
 
 function barColor(p: number): string {
@@ -23,12 +24,20 @@ export default function PredictionsPanel({ predictions }: Props) {
         Model Predictions
       </p>
       <div className="flex flex-col gap-5">
-        {MODELS.map(({ key, label }) => {
-          const prob = predictions[key].prob_up;
+        {MODELS.map(({ key, label, ai }) => {
+          const prob = predictions[key]?.prob_up ?? 0.5;
           return (
             <div key={key}>
+              {ai && <hr className="border-gray-100 -mt-1 mb-4" />}
               <div className="flex justify-between text-sm font-medium text-gray-700 mb-1.5">
-                <span>{label}</span>
+                <span className="flex items-center gap-1.5">
+                  {label}
+                  {ai && (
+                    <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-100 text-violet-600 leading-none">
+                      LLM
+                    </span>
+                  )}
+                </span>
                 <span className="tabular-nums">{prob.toFixed(3)}</span>
               </div>
               <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">

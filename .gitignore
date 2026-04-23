@@ -1,11 +1,28 @@
-# Environments
+# Secrets
 .env
+frontend/.env
+
+# Virtual environment
 .venv/
 
-# Database
+# Database (large binary, regenerated via fetch.py)
 app/data/forex.db
 *.sqlite3
 
 # Python caches
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+
+# Logs
+*.log
+nohup.out
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Editor
+.vscode/
+.idea/

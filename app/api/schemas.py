@@ -46,6 +46,7 @@ class PredictionsBlock(BaseModel):
     xgboost: ModelPrediction
     lstm: ModelPrediction
     meta_learner: ModelPrediction
+    gemini: ModelPrediction
 
 
 class PredictResponse(BaseModel):
